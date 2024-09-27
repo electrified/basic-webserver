@@ -1,0 +1,12 @@
+name: Cppcheck
+on: [push, pull_request]
+
+jobs:
+  cppcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Run Cppcheck
+        uses: cppcheck/cppcheck-action@v1
+        with:
+          args: --enable=all --inconclusive --error-exitcode=1 .
