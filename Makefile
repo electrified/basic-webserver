@@ -1,23 +1,18 @@
-FUZIX_ROOT = /opt/fuzix
-
-include $(FUZIX_ROOT)/Target/rules.z80
-
-SRCS  = httpd5.c
-
+CC = gcc
+CFLAGS = -Wall -g
+TARGET = httpd
+SRCS = httpd.c
 OBJS = $(SRCS:.c=.o)
 
-APPS = httpd
+all: $(TARGET)
 
-all: $(APPS)
+$(TARGET): $(OBJS)
+	$(CC) $(CFLAGS) -o $(TARGET) $(OBJS)
 
-httpd: $(OBJS)
-	$(LINKER) $(LINKER_OPT) -o httpd5 $(CRT0) httpd5.o $(LINKER_TAIL)
-
-size.report: $(APPS)
-	ls -l $^ > $@
+%.o: %.c
+	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
-	rm -f $(OBJS) $(APPS) $(SRCS:.c=) core *~ *.asm *.lst *.sym *.map *.noi *.lk *.ihx *.tmp *.bin size.report *~
+	rm -f $(OBJS) $(TARGET)
 
-rmbak:
-	rm -f *~ core
+.PHONY: all clean
