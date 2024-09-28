@@ -1,13 +1,19 @@
 CC = gcc
-CFLAGS = -Wall -g
-TARGET = httpd
-SRCS = httpd.c
+CFLAGS = -Wall -g -std=gnu89 -pedantic
+TARGET = httpd tftpd test
+SRCS = httpd.c tftpd.c test.c
 OBJS = $(SRCS:.c=.o)
 
 all: $(TARGET)
 
-$(TARGET): $(OBJS)
-	$(CC) $(CFLAGS) -o $(TARGET) $(OBJS)
+httpd: $(OBJS)
+	$(CC) $(CFLAGS) -o httpd httpd.o
+
+tftpd: $(OBJS)
+	$(CC) $(CFLAGS) -o tftpd tftpd.o
+
+test: test.o
+	$(CC) $(CFLAGS) -o test test.o
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@

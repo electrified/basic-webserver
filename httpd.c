@@ -29,13 +29,13 @@ const char* get_content_for_resource(const char *resource) {
 }
 
 // Function to parse query strings
-void parse_query_string(const char *query_string, char params[][2][BUFFER_SIZE], int *param_count) {
+void parse_query_string(char *query_string, char params[][2][BUFFER_SIZE], int *param_count) {
     *param_count = 0;
 
-    const char *start = query_string;
+    char *start = query_string;
     while (start && *start) {
-        const char *eq = strchr(start, '=');
-        const char *amp = strchr(start, '&');
+        char *eq = strchr(start, '=');
+        char *amp = strchr(start, '&');
 
         if (eq) {
             int key_len = eq - start;
@@ -61,7 +61,8 @@ const char* handle_form_submission(const char *data) {
     // Simple parsing: find the value for the "name" field
     if (sscanf(data, "name=%s", name) == 1) {
         // Replace '+' with ' ' in the name (HTTP encoding)
-        for (char *p = name; *p; ++p) {
+        char *p;
+        for (*p = name; *p; ++p) {
             if (*p == '+') *p = ' ';
         }
         snprintf(response, BUFFER_SIZE, "<html><body><h1>Hello, %s!</h1></body></html>", name);
@@ -236,7 +237,8 @@ int main() {
                     parse_query_string(query_string, params, &param_count);
 
                     // Example: Check for a specific parameter in the query string
-                    for (int i = 0; i < param_count; i++) {
+                    int i;
+                    for (i = 0; i < param_count; i++) {
                         if (strcmp(params[i][0], "name") == 0) {
                             snprintf(response + strlen(response), BUFFER_SIZE - strlen(response), "<p>Hello, %s!</p>", params[i][1]);
                         }

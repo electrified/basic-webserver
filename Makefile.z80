@@ -2,16 +2,22 @@ FUZIX_ROOT = /opt/fuzix
 
 include $(FUZIX_ROOT)/Target/rules.z80
 
-SRCS  = httpd5.c
+SRCS  = httpd.c tftpd.c
 
 OBJS = $(SRCS:.c=.o)
 
-APPS = httpd
+APPS = httpd tftpd test
 
 all: $(APPS)
 
 httpd: $(OBJS)
-	$(LINKER) $(LINKER_OPT) -o httpd5 $(CRT0) httpd5.o $(LINKER_TAIL)
+	$(LINKER) $(LINKER_OPT) -o httpd $(CRT0) httpd.o $(LINKER_TAIL)
+
+tftpd: $(OBJS)
+	$(LINKER) $(LINKER_OPT) -o tftpd $(CRT0) tftpd.o $(LINKER_TAIL)
+
+test: test.o
+	$(LINKER) $(LINKER_OPT) -o test $(CRT0) test.o $(LINKER_TAIL)
 
 size.report: $(APPS)
 	ls -l $^ > $@
