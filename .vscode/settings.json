@@ -1,0 +1,9 @@
+{
+        "C_Cpp.default.cStandard": "gnu89",
+        "C_Cpp.default.compilerPath": "/opt/fcc/bin/fcc",
+        "C_Cpp.default.systemIncludePath": [
+                "/home/ed/dev/3rdparty/FUZIX/Library/include/",
+                "/opt/fcc/include/",
+                "/home/ed/dev/3rdparty/Fuzix-Compiler-Kit/supportz80/include/"
+        ]
+}

@@ -6,18 +6,15 @@ SRCS  = httpd.c tftpd.c
 
 OBJS = $(SRCS:.c=.o)
 
-APPS = httpd tftpd test
+APPS = httpd tftpd
 
 all: $(APPS)
 
-httpd: $(OBJS)
+httpd: httpd.o
 	$(LINKER) $(LINKER_OPT) -o httpd $(CRT0) httpd.o $(LINKER_TAIL)
 
-tftpd: $(OBJS)
+tftpd: tftpd.o
 	$(LINKER) $(LINKER_OPT) -o tftpd $(CRT0) tftpd.o $(LINKER_TAIL)
-
-test: test.o
-	$(LINKER) $(LINKER_OPT) -o test $(CRT0) test.o $(LINKER_TAIL)
 
 size.report: $(APPS)
 	ls -l $^ > $@

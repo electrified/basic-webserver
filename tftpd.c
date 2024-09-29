@@ -8,6 +8,11 @@
 #include <dirent.h>
 #include <limits.h>
 
+#include <netinet/in.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <stdint.h>
+
 #define TFTP_DATA_SIZE 512
 #define TFTP_TIMEOUT 5
 #define TFTP_OPCODE_RRQ 1
