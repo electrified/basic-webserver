@@ -145,7 +145,7 @@ const char* generate_dynamic_content() {
 int main() {
     int server_fd, new_socket;
     struct sockaddr_in address;
-    int addrlen = sizeof(address);
+    /* int addrlen = sizeof(address); */
     char buffer[BUFFER_SIZE];
     /* HTTP response header */
     char response[BUFFER_SIZE];
@@ -175,16 +175,20 @@ int main() {
         exit(EXIT_FAILURE);
     }
 
-    printf("Server is listening on port %d\n", PORT);
+    printf("Server v2 is listening on port %d\n", PORT);
 
     while (1) {
         int valread;
         char method[16], resource[256], query_string[BUFFER_SIZE];
         char *query_start;
+        struct sockaddr_in client_address;
+        socklen_t client_len;
 
+        client_len = sizeof(client_address);
         memset(query_string, 0, sizeof(query_string));
 
-        if ((new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen)) < 0) {
+        /* if ((new_socket = accept(server_fd, (struct sockaddr *)&client_address, (socklen_t*)&client_len)) < 0) {*/
+        if ((new_socket = accept(server_fd, NULL, NULL)) < 0) {
             perror("Accept failed");
             close(server_fd);
             exit(EXIT_FAILURE);

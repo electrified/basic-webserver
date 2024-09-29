@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <arpa/inet.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
@@ -9,6 +8,7 @@
 #include <limits.h>
 
 #include <netinet/in.h>
+#include <arpa/inet.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <stdint.h>
@@ -21,20 +21,26 @@
 #define TFTP_OPCODE_ACK 4
 #define TFTP_OPCODE_ERROR 5
 
-// TFTP error codes
+/* TFTP error codes */
 #define TFTP_ERROR_FILE_NOT_FOUND 1
 #define TFTP_ERROR_ACCESS_VIOLATION 2
 #define TFTP_ERROR_DISK_FULL 3
 #define TFTP_ERROR_ILLEGAL_OP 4
 #define TFTP_ERROR_UNKNOWN_ID 5
 
-#define DEFAULT_TFTP_PORT 69 // Default TFTP port
-#define MAX_PATH_LENGTH 1024  // Maximum path length for files
+#define DEFAULT_TFTP_PORT 69
 
-// Packet buffer size
+#ifndef PATH_MAX
+#define PATH_MAX	512	/* FIXME: it's a sysconf shouldn't be static here */
+#endif
+
+#ifndef INET_ADDRSTRLEN
+#define INET_ADDRSTRLEN 16
+#endif
+
+/* Packet buffer size */
 #define PACKET_SIZE (4 + TFTP_DATA_SIZE)
 
-// Function declarations
 void handle_rrq(int sock, struct sockaddr_in *client_addr, socklen_t client_len, const char *filename, const char *directory);
 void handle_wrq(int sock, struct sockaddr_in *client_addr, socklen_t client_len, const char *filename, const char *directory);
 void send_error(int sock, struct sockaddr_in *client_addr, socklen_t client_len, int error_code, const char *error_msg);
@@ -48,34 +54,33 @@ int main(int argc, char *argv[]) {
     socklen_t client_len = sizeof(client_addr);
     char buffer[PACKET_SIZE];
     ssize_t recv_len;
-    int port = DEFAULT_TFTP_PORT; // Default TFTP port
-    const char *directory = ".";   // Default directory is current working directory
+    int port = DEFAULT_TFTP_PORT;
+    const char *directory = "."; /* Default directory is current working directory */
 
-    // Check for command-line arguments
+    /* Check for command-line arguments */
     if (argc < 2 || argc > 3) {
         fprintf(stderr, "Usage: %s <port> [directory]\n", argv[0]);
         exit(EXIT_FAILURE);
     }
 
-    // Set port from command-line argument
+    /* Set port from command-line argument */
     port = atoi(argv[1]);
     if (port <= 0 || port > 65535) {
         fprintf(stderr, "Invalid port number: %s. Using default port %d.\n", argv[1], DEFAULT_TFTP_PORT);
         port = DEFAULT_TFTP_PORT;
     }
 
-    // Set directory from command-line argument if provided
+    /* Set directory from command-line argument if provided */
     if (argc == 3) {
         directory = argv[2];
     }
 
-    // Create UDP socket
+    /* Create UDP socket */
     if ((sock = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
         perror("socket failed");
         exit(EXIT_FAILURE);
     }
 
-    // Bind to specified port
     memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
     server_addr.sin_addr.s_addr = INADDR_ANY;
@@ -90,18 +95,19 @@ int main(int argc, char *argv[]) {
     printf("TFTP server listening on port %d, using directory: '%s'...\n", port, directory);
 
     while (1) {
-        // Receive incoming TFTP request
+        uint16_t opcode;
+        char *filename;
+        /* Receive incoming TFTP request */
         recv_len = recvfrom(sock, buffer, sizeof(buffer), 0, (struct sockaddr *)&client_addr, &client_len);
         if (recv_len < 0) {
             perror("recvfrom failed");
             continue;
         }
 
-        // Determine the request type (RRQ or WRQ)
-        uint16_t opcode = ntohs(*(uint16_t *)buffer);
-        char *filename = buffer + 2;
+        /* Determine the request type (RRQ or WRQ) */
+        opcode = ntohs(*(uint16_t *)buffer);
+        filename = buffer + 2;
 
-        // Log incoming packet
         log_packet("Received", opcode == TFTP_OPCODE_RRQ ? "RRQ" : "WRQ", filename, 0, recv_len);
 
         if (opcode == TFTP_OPCODE_RRQ) {
@@ -111,7 +117,7 @@ int main(int argc, char *argv[]) {
             log_request(&client_addr, "WRQ", filename);
             handle_wrq(sock, &client_addr, client_len, filename, directory);
         } else {
-            // Unsupported request type
+            /* Unsupported request type */
             log_error("Unsupported TFTP operation", &client_addr, TFTP_ERROR_ILLEGAL_OP, "Illegal TFTP operation");
             send_error(sock, &client_addr, client_len, TFTP_ERROR_ILLEGAL_OP, "Illegal TFTP operation");
         }
@@ -122,48 +128,37 @@ int main(int argc, char *argv[]) {
 }
 void handle_rrq(int sock, struct sockaddr_in *client_addr, socklen_t client_len, const char *filename, const char *directory) {
     char data_packet[PACKET_SIZE];
-    char full_path[MAX_PATH_LENGTH];
-    char resolved_path[PATH_MAX];
+    char full_path[PATH_MAX];
+    int file;
 
-    // Construct the full file path
+    uint16_t block = 0;
+    ssize_t bytes_read;
+
+    /* Construct the full file path */
     snprintf(full_path, sizeof(full_path), "%s/%s", directory, filename);
 
-    // Resolve the absolute path
-    if (realpath(full_path, resolved_path) == NULL) {
-        log_error("Could not resolve path", client_addr, TFTP_ERROR_ACCESS_VIOLATION, strerror(errno));
-        send_error(sock, client_addr, client_len, TFTP_ERROR_ACCESS_VIOLATION, "Access violation: Invalid path");
-        return;
-    }
-
-    // Check if the resolved path starts with the expected directory path
-    if (strncmp(resolved_path, directory, strlen(directory)) != 0) {
-        log_error("Access violation: Attempt to read outside designated directory", client_addr, TFTP_ERROR_ACCESS_VIOLATION, "Access violation: Path traversal detected");
-        send_error(sock, client_addr, client_len, TFTP_ERROR_ACCESS_VIOLATION, "Access violation: Path traversal detected");
-        return;
-    }
-
-    // Open file for reading
-    int file = open(resolved_path, O_RDONLY);
+    /* Open file for reading */
+    file = open(full_path, O_RDONLY);
     if (file < 0) {
         log_error("File cannot be opened", client_addr, TFTP_ERROR_FILE_NOT_FOUND, strerror(errno));
         send_error(sock, client_addr, client_len, TFTP_ERROR_FILE_NOT_FOUND, "File not found");
         return;
     }
 
-    printf("RRQ: Sending file '%s' to client\n", resolved_path);
+    printf("RRQ: Sending file '%s' to client\n", full_path);
 
-    uint16_t block = 0;
-    ssize_t bytes_read;
-
-    // Send data blocks to client
+    /* Send data blocks to client */
     while ((bytes_read = read(file, data_packet + 4, TFTP_DATA_SIZE)) > 0) {
-        // Prepare the data packet
+        char ack_packet[4];
+        socklen_t len;
+
+        /* Prepare the data packet */
         data_packet[0] = 0;
         data_packet[1] = TFTP_OPCODE_DATA;
         data_packet[2] = (block + 1) >> 8;
         data_packet[3] = (block + 1) & 0xFF;
 
-        // Send the data packet
+        /* Send the data packet */
         if (sendto(sock, data_packet, bytes_read + 4, 0, (struct sockaddr *)client_addr, client_len) < 0) {
             perror("sendto failed");
             close(file);
@@ -172,16 +167,15 @@ void handle_rrq(int sock, struct sockaddr_in *client_addr, socklen_t client_len,
 
         printf("Sent DATA block %d, Size: %zd bytes\n", block + 1, bytes_read);
         
-        // Wait for the ACK from the client
-        char ack_packet[4];
-        socklen_t len = client_len;
+        /* Wait for the ACK from the client */
+        len = client_len;
         if (recvfrom(sock, ack_packet, sizeof(ack_packet), 0, (struct sockaddr *)client_addr, &len) < 0) {
             perror("recvfrom failed");
             close(file);
             return;
         }
 
-        // Check if the received packet is an ACK
+        /* Check if the received packet is an ACK */
         if (ntohs(*(uint16_t *)ack_packet) != TFTP_OPCODE_ACK || ntohs(*(uint16_t *)(ack_packet + 2)) != block + 1) {
             log_error("Invalid ACK received", client_addr, TFTP_ERROR_ILLEGAL_OP, "Illegal TFTP operation");
             send_error(sock, client_addr, client_len, TFTP_ERROR_ILLEGAL_OP, "Illegal TFTP operation");
@@ -193,42 +187,29 @@ void handle_rrq(int sock, struct sockaddr_in *client_addr, socklen_t client_len,
     }
 
     close(file);
-    printf("RRQ: File '%s' send complete\n", resolved_path);
+    printf("RRQ: File '%s' send complete\n", full_path);
 }
 
 void handle_wrq(int sock, struct sockaddr_in *client_addr, socklen_t client_len, const char *filename, const char *directory) {
     char data_packet[PACKET_SIZE];
-    char full_path[MAX_PATH_LENGTH];
-    char resolved_path[PATH_MAX];
+    char full_path[PATH_MAX];
+    int file;
+    ssize_t recv_len;
+    uint16_t block;
 
-    // Construct the full file path
     snprintf(full_path, sizeof(full_path), "%s/%s", directory, filename);
 
-    // Resolve the absolute path
-    if (realpath(full_path, resolved_path) == NULL) {
-        log_error("Could not resolve path", client_addr, TFTP_ERROR_ACCESS_VIOLATION, strerror(errno));
-        send_error(sock, client_addr, client_len, TFTP_ERROR_ACCESS_VIOLATION, "Access violation: Invalid path");
-        return;
-    }
-
-    // Check if the resolved path starts with the expected directory path
-    if (strncmp(resolved_path, directory, strlen(directory)) != 0) {
-        log_error("Access violation: Attempt to write outside designated directory", client_addr, TFTP_ERROR_ACCESS_VIOLATION, "Access violation: Path traversal detected");
-        send_error(sock, client_addr, client_len, TFTP_ERROR_ACCESS_VIOLATION, "Access violation: Path traversal detected");
-        return;
-    }
-
-    // Open file for writing
-    int file = open(resolved_path, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+    /* Open file for writing */
+    file = open(full_path, O_WRONLY | O_CREAT | O_TRUNC, 0666);
     if (file < 0) {
         log_error("File cannot be created", client_addr, TFTP_ERROR_ACCESS_VIOLATION, strerror(errno));
         send_error(sock, client_addr, client_len, TFTP_ERROR_ACCESS_VIOLATION, "Cannot create file");
         return;
     }
 
-    printf("WRQ: Receiving file '%s' from client\n", resolved_path);
+    printf("WRQ: Receiving file '%s' from client\n", full_path);
 
-    // Send ACK for block 0
+    /* Send ACK for block 0 */
     data_packet[0] = 0;
     data_packet[1] = TFTP_OPCODE_ACK;
     data_packet[2] = 0;
@@ -240,9 +221,8 @@ void handle_wrq(int sock, struct sockaddr_in *client_addr, socklen_t client_len,
     }
     printf("Sent ACK for block 0\n");
 
-    // Receive data and write to file
-    ssize_t recv_len;
-    uint16_t block = 0;
+    /* Receive data and write to file */
+    block = 0;
     while ((recv_len = recvfrom(sock, data_packet, sizeof(data_packet), 0, (struct sockaddr *)client_addr, &client_len)) > 0) {
         uint16_t data_block = ntohs(*(uint16_t *)(data_packet + 2));
         if (ntohs(*(uint16_t *)data_packet) != TFTP_OPCODE_DATA) {
@@ -253,11 +233,11 @@ void handle_wrq(int sock, struct sockaddr_in *client_addr, socklen_t client_len,
         }
 
         if (data_block == block + 1) {
-            // Write data to file
+            char ack_packet[4];
+            /* Write data to file */
             write(file, data_packet + 4, recv_len - 4);
 
-            // Send ACK for the received block
-            char ack_packet[4];
+            /* Send ACK for the received block */
             ack_packet[0] = 0;
             ack_packet[1] = TFTP_OPCODE_ACK;
             ack_packet[2] = (block + 1) >> 8;
@@ -273,14 +253,14 @@ void handle_wrq(int sock, struct sockaddr_in *client_addr, socklen_t client_len,
             block++;
         }
 
-        // End of transfer (last block < 512 bytes)
+        /* End of transfer (last block < 512 bytes) */
         if (recv_len < TFTP_DATA_SIZE + 4) {
             break;
         }
     }
 
     close(file);
-    printf("WRQ: File '%s' upload complete\n", resolved_path);
+    printf("WRQ: File '%s' upload complete\n", full_path);
 }
 
 
