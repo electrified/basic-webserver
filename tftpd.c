@@ -4,14 +4,9 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
-#include <dirent.h>
-#include <limits.h>
-
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#include <sys/types.h>
 #include <sys/socket.h>
-#include <stdint.h>
 
 #define TFTP_DATA_SIZE 512
 #define TFTP_TIMEOUT 5
